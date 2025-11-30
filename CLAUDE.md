@@ -9,8 +9,8 @@ Chat Signal Radar is a Chrome extension that analyzes YouTube and Twitch live ch
 ## Architecture
 
 ```
-Content Script → Background Worker → Sidebar UI → WASM Engine
-(DOM observer)    (message relay)    (display)    (clustering)
+Content Script → Background Worker → Sidebar UI → WASM Engine → LLM Adapter (optional)
+(DOM observer)    (message relay)    (display)    (clustering)   (AI summaries)
 ```
 
 - **wasm-engine/**: Rust WASM clustering engine
@@ -18,6 +18,8 @@ Content Script → Background Worker → Sidebar UI → WASM Engine
   - `content-script.js`: DOM observer for YouTube/Twitch chat
   - `background.js`: Service worker for message relay
   - `sidebar/`: UI components (HTML, JS, CSS)
+  - `llm-adapter.js`: WebLLM integration with fallback summarizer
+  - `libs/web-llm/`: Bundled WebLLM library (optional, for AI summaries)
   - `wasm/`: Generated WASM artifacts (git-ignored)
 - **scripts/**: Build automation
 
@@ -50,6 +52,8 @@ There are 5 unit tests in `wasm-engine/src/lib.rs` covering clustering logic.
 - `extension/manifest.json`: Extension permissions and configuration
 - `extension/content-script.js`: Platform-specific chat extraction (YouTube/Twitch selectors)
 - `extension/sidebar/sidebar.js`: WASM loading and UI rendering
+- `extension/llm-adapter.js`: WebLLM wrapper with fallback summarizer
+- `extension/WEBLLM_SETUP.md`: Detailed WebLLM setup instructions
 
 ## Coding Conventions
 
@@ -78,3 +82,32 @@ There are 5 unit tests in `wasm-engine/src/lib.rs` covering clustering logic.
 - wasm-pack
 - Chrome browser
 - Optional: cargo-watch for development auto-rebuild
+
+## WebLLM Integration (Optional)
+
+The extension supports optional AI-powered summaries using WebLLM (in-browser LLM). The feature gracefully degrades to a rule-based fallback if WebLLM is not available.
+
+### How it works
+
+1. `llm-adapter.js` attempts to load WebLLM from `libs/web-llm/index.js`
+2. If successful, uses Phi-2-q4f16_1-MLC model for summarization (~400MB download on first run)
+3. If bundle not found, falls back to rule-based summary extraction
+4. Sidebar displays AI-generated summaries alongside cluster buckets
+
+### Setup Options
+
+See `extension/WEBLLM_SETUP.md` for detailed instructions. Three options:
+- **Manual Bundle** (recommended): Download pre-built WebLLM files
+- **Build from Source**: Use npm/esbuild to bundle
+- **Fallback Only**: Works without any setup using rule-based summaries
+
+### LLM Adapter API
+
+```javascript
+import { initializeLLM, summarizeBuckets, isLLMReady, resetLLM } from './llm-adapter.js';
+
+await initializeLLM(progressCallback);  // Initialize engine
+const summary = await summarizeBuckets(buckets);  // Generate summary
+isLLMReady();  // Check if ready
+await resetLLM();  // Cleanup
+```
