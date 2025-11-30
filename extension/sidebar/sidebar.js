@@ -26,7 +26,6 @@ async function initWasm() {
     wasmModule = { cluster_messages };
     
     statusText.textContent = 'Ready! Waiting for chat messages...';
-    console.log('WASM module loaded successfully');
     
   } catch (error) {
     console.error('Failed to load WASM:', error);
@@ -106,8 +105,6 @@ const MAX_MESSAGES = 100; // Keep last 100 messages
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CHAT_MESSAGES') {
-    console.log('Received chat messages:', message.messages.length);
-    
     // Add new messages to accumulator
     allMessages.push(...message.messages);
     

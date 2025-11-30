@@ -15,5 +15,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   return false;
 });
-
-console.log('Chat Signal Radar background service worker initialized');

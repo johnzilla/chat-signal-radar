@@ -1,7 +1,5 @@
 // Content script for YouTube/Twitch live chat monitoring
 
-console.log('Chat Signal Radar content script loaded');
-
 const BATCH_INTERVAL = 5000; // 5 seconds
 let messageBatch = [];
 
@@ -73,8 +71,6 @@ function observeChat() {
 }
 
 function startObserving(container, selector, extractor) {
-  console.log('Chat Signal Radar: Started observing chat');
-
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
@@ -99,7 +95,6 @@ function startObserving(container, selector, extractor) {
   // Send batched messages periodically
   setInterval(() => {
     if (messageBatch.length > 0) {
-      console.log(`Chat Signal Radar: Sending batch of ${messageBatch.length} messages`);
       chrome.runtime.sendMessage({
         type: 'CHAT_MESSAGES',
         messages: messageBatch,
