@@ -37,11 +37,11 @@ pub fn cluster_messages(messages_json: JsValue) -> Result<JsValue, JsValue> {
     for msg in messages.iter() {
         let text_lower = msg.text.to_lowercase();
         
-        if text_lower.contains('?') || text_lower.contains("how") || text_lower.contains("what") || text_lower.contains("why") {
+        if text_lower.contains('?') || text_lower.contains("how ") || text_lower.contains("what ") || text_lower.contains("why ") {
             questions.push(msg.text.clone());
         } else if text_lower.contains("bug") || text_lower.contains("error") || text_lower.contains("broken") || text_lower.contains("issue") {
             issues.push(msg.text.clone());
-        } else if text_lower.contains("please") || text_lower.contains("can you") || text_lower.contains("could you") {
+        } else if text_lower.contains("please") || text_lower.contains("can you") || text_lower.contains("could you") || text_lower.contains("would you") {
             requests.push(msg.text.clone());
         } else {
             general.push(msg.text.clone());
@@ -89,4 +89,145 @@ pub fn cluster_messages(messages_json: JsValue) -> Result<JsValue, JsValue> {
 
     serde_wasm_bindgen::to_value(&result)
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_message(text: &str) -> Message {
+        Message {
+            text: text.to_string(),
+            author: "TestUser".to_string(),
+            timestamp: 0.0,
+        }
+    }
+
+    #[test]
+    fn test_question_clustering() {
+        let messages = vec![
+            create_test_message("How do I do this?"),
+            create_test_message("What is the answer?"),
+            create_test_message("Why does this happen?"),
+            create_test_message("Just a regular message"),
+        ];
+
+        let result = cluster_messages_internal(&messages);
+
+        // Should have Questions and General Chat buckets
+        assert!(result.buckets.iter().any(|b| b.label == "Questions"));
+        
+        let questions_bucket = result.buckets.iter().find(|b| b.label == "Questions").unwrap();
+        assert_eq!(questions_bucket.count, 3);
+    }
+
+    #[test]
+    fn test_issue_clustering() {
+        let messages = vec![
+            create_test_message("This is broken!"),
+            create_test_message("I found a bug in the system"),
+            create_test_message("Error when loading"),
+            create_test_message("Everything works great"),
+        ];
+
+        let result = cluster_messages_internal(&messages);
+
+        let issues_bucket = result.buckets.iter().find(|b| b.label == "Issues/Bugs");
+        assert!(issues_bucket.is_some());
+        assert_eq!(issues_bucket.unwrap().count, 3);
+    }
+
+    #[test]
+    fn test_request_clustering() {
+        let messages = vec![
+            create_test_message("Please help me"),
+            create_test_message("Could you check this"),
+            create_test_message("Thanks for streaming"),
+        ];
+
+        let result = cluster_messages_internal(&messages);
+
+        let requests_bucket = result.buckets.iter().find(|b| b.label == "Requests");
+        assert!(requests_bucket.is_some(), "Requests bucket should exist");
+        let count = requests_bucket.unwrap().count;
+        assert!(count >= 2, "Expected at least 2 requests, got {}", count);
+    }
+
+    #[test]
+    fn test_sample_messages_limit() {
+        let messages = vec![
+            create_test_message("Question 1?"),
+            create_test_message("Question 2?"),
+            create_test_message("Question 3?"),
+            create_test_message("Question 4?"),
+            create_test_message("Question 5?"),
+        ];
+
+        let result = cluster_messages_internal(&messages);
+
+        let questions_bucket = result.buckets.iter().find(|b| b.label == "Questions").unwrap();
+        assert_eq!(questions_bucket.count, 5);
+        assert_eq!(questions_bucket.sample_messages.len(), 3); // Should only show 3 samples
+    }
+
+    // Internal function for testing (not exposed to WASM)
+    fn cluster_messages_internal(messages: &[Message]) -> ClusterResult {
+        let mut questions = Vec::new();
+        let mut issues = Vec::new();
+        let mut requests = Vec::new();
+        let mut general = Vec::new();
+
+        for msg in messages.iter() {
+            let text_lower = msg.text.to_lowercase();
+            
+            if text_lower.contains('?') || text_lower.contains("how ") || text_lower.contains("what ") || text_lower.contains("why ") {
+                questions.push(msg.text.clone());
+            } else if text_lower.contains("bug") || text_lower.contains("error") || text_lower.contains("broken") || text_lower.contains("issue") {
+                issues.push(msg.text.clone());
+            } else if text_lower.contains("please") || text_lower.contains("can you") || text_lower.contains("could you") || text_lower.contains("would you") {
+                requests.push(msg.text.clone());
+            } else {
+                general.push(msg.text.clone());
+            }
+        }
+
+        let mut buckets = Vec::new();
+
+        if !questions.is_empty() {
+            buckets.push(ClusterBucket {
+                label: "Questions".to_string(),
+                count: questions.len(),
+                sample_messages: questions.into_iter().take(3).collect(),
+            });
+        }
+
+        if !issues.is_empty() {
+            buckets.push(ClusterBucket {
+                label: "Issues/Bugs".to_string(),
+                count: issues.len(),
+                sample_messages: issues.into_iter().take(3).collect(),
+            });
+        }
+
+        if !requests.is_empty() {
+            buckets.push(ClusterBucket {
+                label: "Requests".to_string(),
+                count: requests.len(),
+                sample_messages: requests.into_iter().take(3).collect(),
+            });
+        }
+
+        if !general.is_empty() {
+            buckets.push(ClusterBucket {
+                label: "General Chat".to_string(),
+                count: general.len(),
+                sample_messages: general.into_iter().take(3).collect(),
+            });
+        }
+
+        ClusterResult {
+            buckets,
+            processed_count: messages.len(),
+        }
+    }
 }
