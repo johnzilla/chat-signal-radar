@@ -1,6 +1,9 @@
 // Sidebar script - loads WASM and processes chat messages
 
+import { initializeLLM, summarizeBuckets, isLLMReady } from '../llm-adapter.js';
+
 let wasmModule = null;
+let llmEnabled = false;
 
 // DOM elements
 const statusText = document.getElementById('status-text');
@@ -9,6 +12,8 @@ const statsDiv = document.getElementById('stats');
 const processedCount = document.getElementById('processed-count');
 const clustersDiv = document.getElementById('clusters');
 const errorDiv = document.getElementById('error');
+const aiSummaryDiv = document.getElementById('ai-summary');
+const aiSummaryText = document.getElementById('ai-summary-text');
 
 // Initialize WASM module
 async function initWasm() {
@@ -25,7 +30,20 @@ async function initWasm() {
     
     wasmModule = { cluster_messages };
     
-    statusText.textContent = 'Ready! Waiting for chat messages...';
+    statusText.textContent = 'Loading AI model...';
+    
+    // Initialize LLM in background
+    initializeLLM((progress) => {
+      statusText.textContent = `Loading AI: ${Math.round(progress.progress * 100)}%`;
+    }).then(() => {
+      llmEnabled = true;
+      statusText.textContent = 'Ready! Waiting for chat messages...';
+      console.log('[Sidebar] LLM initialized');
+    }).catch((error) => {
+      console.warn('[Sidebar] LLM initialization failed, continuing without AI summaries:', error);
+      llmEnabled = false;
+      statusText.textContent = 'Ready! Waiting for chat messages...';
+    });
     
   } catch (error) {
     console.error('Failed to load WASM:', error);
@@ -100,10 +118,30 @@ function processMessages(messages) {
       clustersDiv.appendChild(bucketEl);
     });
     
+    // Generate AI summary if enabled
+    if (llmEnabled && isLLMReady() && result.buckets.length > 0) {
+      generateAISummary(result.buckets);
+    }
+    
   } catch (error) {
     console.error('Error processing messages:', error);
     errorDiv.textContent = `Processing error: ${error.message}`;
     errorDiv.classList.remove('hidden');
+  }
+}
+
+// Generate AI summary from buckets
+async function generateAISummary(buckets) {
+  try {
+    aiSummaryText.textContent = 'Generating AI summary...';
+    aiSummaryDiv.classList.remove('hidden');
+    
+    const summary = await summarizeBuckets(buckets);
+    aiSummaryText.textContent = summary.summary;
+    
+  } catch (error) {
+    console.error('[Sidebar] AI summary failed:', error);
+    aiSummaryDiv.classList.add('hidden');
   }
 }
 

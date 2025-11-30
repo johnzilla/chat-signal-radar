@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Clusters YouTube/Twitch live chat messages into top questions, issues, and requests",
   "permissions": [
-    "sidePanel"
+    "sidePanel",
+    "storage"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
@@ -30,7 +31,13 @@
   "action": {
     "default_title": "Open Chat Signal Radar"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["libs/web-llm/*", "models/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src https://huggingface.co https://*.huggingface.co https://raw.githubusercontent.com;"
   }
 }

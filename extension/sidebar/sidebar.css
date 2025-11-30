@@ -75,6 +75,26 @@ h1 {
   font-size: 18px;
 }
 
+.ai-summary {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ai-summary h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.ai-summary-text {
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.85;
+}
+
 .clusters {
   display: flex;
   flex-direction: column;
