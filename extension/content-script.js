@@ -41,10 +41,13 @@ function extractTwitchMessage(element) {
 function observeChat() {
   let chatContainer = null;
   let observer = null;
+  const MAX_RETRIES = 30; // 30 seconds
+  let retryCount = 0;
 
   if (isYouTube) {
     // Wait for YouTube chat iframe or embedded chat
     const checkForChat = setInterval(() => {
+      retryCount++;
       const iframe = document.querySelector('iframe#chatframe');
       if (iframe && iframe.contentDocument) {
         chatContainer = iframe.contentDocument.querySelector('#items');
@@ -54,23 +57,34 @@ function observeChat() {
 
       if (chatContainer) {
         clearInterval(checkForChat);
-        startObserving(chatContainer, YOUTUBE_CHAT_SELECTOR, extractYouTubeMessage);
+        console.log('[Chat Signal Radar] YouTube chat container found');
+        startObserving(chatContainer, YOUTUBE_CHAT_SELECTOR, extractYouTubeMessage, 'YouTube');
+      } else if (retryCount >= MAX_RETRIES) {
+        clearInterval(checkForChat);
+        console.warn('[Chat Signal Radar] YouTube chat container not found after 30 seconds. Chat may not be available on this page.');
       }
     }, 1000);
   } else if (isTwitch) {
     // Wait for Twitch chat
     const checkForChat = setInterval(() => {
+      retryCount++;
       chatContainer = document.querySelector('.chat-scrollable-area__message-container');
       
       if (chatContainer) {
         clearInterval(checkForChat);
-        startObserving(chatContainer, TWITCH_CHAT_SELECTOR, extractTwitchMessage);
+        console.log('[Chat Signal Radar] Twitch chat container found');
+        startObserving(chatContainer, TWITCH_CHAT_SELECTOR, extractTwitchMessage, 'Twitch');
+      } else if (retryCount >= MAX_RETRIES) {
+        clearInterval(checkForChat);
+        console.warn('[Chat Signal Radar] Twitch chat container not found after 30 seconds. Chat may not be available on this page.');
       }
     }, 1000);
   }
 }
 
-function startObserving(container, selector, extractor) {
+function startObserving(container, selector, extractor, platform) {
+  console.log(`[Chat Signal Radar] Started observing ${platform} chat`);
+  
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {

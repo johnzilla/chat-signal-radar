@@ -43,14 +43,25 @@ function processMessages(messages) {
   }
 
   try {
-    // Call WASM clustering function
+    // Call WASM clustering function - returns ClusterResult
     const result = wasmModule.cluster_messages(messages);
+    
+    // Validate ClusterResult shape
+    if (!result || typeof result !== 'object') {
+      throw new Error('Invalid result from cluster_messages');
+    }
+    if (!Array.isArray(result.buckets)) {
+      throw new Error('ClusterResult.buckets must be an array');
+    }
+    if (typeof result.processed_count !== 'number') {
+      throw new Error('ClusterResult.processed_count must be a number');
+    }
     
     // Update UI
     statusDiv.classList.add('active');
     statusText.textContent = 'Processing live chat...';
     statsDiv.classList.remove('hidden');
-    processedCount.textContent = allMessages.length; // Show total accumulated
+    processedCount.textContent = result.processed_count;
     
     // Clear previous clusters
     clustersDiv.innerHTML = '';
@@ -64,8 +75,13 @@ function processMessages(messages) {
       return;
     }
     
-    // Render cluster buckets
+    // Render cluster buckets - validate each bucket shape
     result.buckets.forEach(bucket => {
+      if (!bucket.label || !bucket.count || !Array.isArray(bucket.sample_messages)) {
+        console.warn('Invalid bucket shape:', bucket);
+        return;
+      }
+      
       const bucketEl = document.createElement('div');
       bucketEl.className = 'cluster-bucket';
       
