@@ -4,8 +4,7 @@
   "version": "0.1.0",
   "description": "Clusters YouTube/Twitch live chat messages into top questions, issues, and requests",
   "permissions": [
-    "sidePanel",
-    "storage"
+    "sidePanel"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",

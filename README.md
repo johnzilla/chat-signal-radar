@@ -58,16 +58,28 @@ chat-signal-radar/
 
 ## 🛠️ Development
 
+### Dev Workflow
+
+1. **Start watch mode:**
+   ```bash
+   chmod +x scripts/watch.sh
+   ./scripts/watch.sh
+   ```
+
+2. **Open a test stream** (YouTube live or Twitch with active chat)
+
+3. **After code changes:**
+   - Watch mode auto-rebuilds WASM
+   - Go to `chrome://extensions/`
+   - Click reload icon on Chat Signal Radar extension
+   - Refresh the stream page
+
 ### Watch Mode (Auto-rebuild)
 
 Requires [cargo-watch](https://github.com/watchexec/cargo-watch):
 ```bash
 cargo install cargo-watch
-chmod +x scripts/watch.sh
-./scripts/watch.sh
 ```
-
-After WASM rebuilds, reload the extension in `chrome://extensions/`.
 
 ### Modifying the Clustering Logic
 
@@ -75,6 +87,13 @@ Edit `wasm-engine/src/lib.rs` and rebuild. Current v0 implementation uses simple
 - TF-IDF or embedding-based similarity
 - Language-specific NLP models
 - User-configurable categories
+
+### Run Tests
+
+```bash
+cd wasm-engine
+cargo test
+```
 
 ## 🎯 How It Works
 
