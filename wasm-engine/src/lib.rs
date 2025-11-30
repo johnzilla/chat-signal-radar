@@ -21,7 +21,44 @@ pub struct ClusterResult {
     pub processed_count: usize,
 }
 
-/// Main entry point: cluster messages into labeled buckets
+/// Clusters chat messages into labeled buckets (Questions, Issues, Requests, General Chat).
+///
+/// # Input JSON Shape
+/// 
+/// Array of message objects:
+/// ```json
+/// [
+///   {
+///     "text": "How do I install this?",
+///     "author": "user123",
+///     "timestamp": 1638360000000
+///   }
+/// ]
+/// ```
+///
+/// # Output JSON Shape
+///
+/// ```json
+/// {
+///   "buckets": [
+///     {
+///       "label": "Questions",
+///       "count": 5,
+///       "sample_messages": ["How do I...", "What is...", "Why does..."]
+///     }
+///   ],
+///   "processed_count": 10
+/// }
+/// ```
+///
+/// # Clustering Rules (v0)
+///
+/// - **Questions**: Contains `?` or keywords: `how`, `what`, `why`
+/// - **Issues/Bugs**: Keywords: `bug`, `error`, `broken`, `issue`
+/// - **Requests**: Keywords: `please`, `can you`, `could you`, `would you`
+/// - **General Chat**: Everything else
+///
+/// Returns up to 3 sample messages per bucket.
 #[wasm_bindgen]
 pub fn cluster_messages(messages_json: JsValue) -> Result<JsValue, JsValue> {
     // Parse incoming messages
@@ -168,6 +205,29 @@ mod tests {
         let questions_bucket = result.buckets.iter().find(|b| b.label == "Questions").unwrap();
         assert_eq!(questions_bucket.count, 5);
         assert_eq!(questions_bucket.sample_messages.len(), 3); // Should only show 3 samples
+    }
+
+    #[test]
+    fn test_general_chat_only() {
+        let messages = vec![
+            create_test_message("Hello everyone"),
+            create_test_message("Great stream today"),
+            create_test_message("Thanks for the content"),
+            create_test_message("Keep up the good work"),
+        ];
+
+        let result = cluster_messages_internal(&messages);
+
+        // Should only have General Chat bucket
+        assert_eq!(result.buckets.len(), 1);
+        let general_bucket = result.buckets.iter().find(|b| b.label == "General Chat");
+        assert!(general_bucket.is_some());
+        assert_eq!(general_bucket.unwrap().count, 4);
+
+        // Ensure no other buckets exist
+        assert!(result.buckets.iter().find(|b| b.label == "Questions").is_none());
+        assert!(result.buckets.iter().find(|b| b.label == "Issues/Bugs").is_none());
+        assert!(result.buckets.iter().find(|b| b.label == "Requests").is_none());
     }
 
     // Internal function for testing (not exposed to WASM)
