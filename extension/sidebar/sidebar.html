@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Signal Radar</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📡 Chat Signal Radar</h1>
+      <p class="subtitle">Live chat insights</p>
+    </header>
+
+    <div id="status" class="status">
+      <span class="status-indicator"></span>
+      <span id="status-text">Waiting for chat messages...</span>
+    </div>
+
+    <div id="stats" class="stats hidden">
+      <span id="processed-count">0</span> messages processed
+    </div>
+
+    <div id="clusters" class="clusters">
+      <!-- Cluster buckets will be inserted here -->
+    </div>
+
+    <div id="error" class="error hidden"></div>
+  </div>
+
+  <script type="module" src="sidebar.js"></script>
+</body>
+</html>

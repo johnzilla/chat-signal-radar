@@ -1,0 +1,25 @@
+# Rust
+/wasm-engine/target/
+/wasm-engine/pkg/
+/wasm-engine/Cargo.lock
+
+# WASM artifacts in extension (generated)
+/extension/wasm/
+
+# Node (if added later)
+node_modules/
+package-lock.json
+
+# Build artifacts
+dist/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
