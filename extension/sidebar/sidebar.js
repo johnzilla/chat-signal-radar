@@ -51,7 +51,7 @@ function processMessages(messages) {
     statusDiv.classList.add('active');
     statusText.textContent = 'Processing live chat...';
     statsDiv.classList.remove('hidden');
-    processedCount.textContent = result.processed_count;
+    processedCount.textContent = allMessages.length; // Show total accumulated
     
     // Clear previous clusters
     clustersDiv.innerHTML = '';
@@ -99,11 +99,25 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Accumulate messages across batches for better clustering
+let allMessages = [];
+const MAX_MESSAGES = 100; // Keep last 100 messages
+
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CHAT_MESSAGES') {
     console.log('Received chat messages:', message.messages.length);
-    processMessages(message.messages);
+    
+    // Add new messages to accumulator
+    allMessages.push(...message.messages);
+    
+    // Keep only recent messages
+    if (allMessages.length > MAX_MESSAGES) {
+      allMessages = allMessages.slice(-MAX_MESSAGES);
+    }
+    
+    // Process all accumulated messages
+    processMessages(allMessages);
   }
 });
 
