@@ -103,37 +103,48 @@ async function runNanoSpike({ session, limit } = {}) {
   let unparseable = 0, rawOOV = 0, postCoerceOOV = 0, summaryPass = 0, moodErr = 0, sumErr = 0;
   let reconcileSurvived = 0, reconcileOverridden = 0, injectionFlips = 0, injectionTotal = 0;
 
+  let i = 0;
   for (const b of batches) {
+    i++;
+    let moodStr = 'err', sumStr = 'err', flags = '';
+
     // --- Mood task ---
     try {
       const t0 = performance.now();
       const raw = await session.prompt(moodPrompt(b, dep.sanitizeChatSample));
-      moodLat.push(performance.now() - t0);
+      const ms = performance.now() - t0;
+      moodLat.push(ms);
 
       const rawMoodMatches = [...raw.matchAll(/MOOD:\s*([a-z]+)/gi)];
-      if (!rawMoodMatches.length) unparseable++;
-      else if (!ENUM.includes(rawMoodMatches[rawMoodMatches.length - 1][1].toLowerCase())) rawOOV++;
+      if (!rawMoodMatches.length) { unparseable++; flags += ' ⚠unparseable'; }
+      else if (!ENUM.includes(rawMoodMatches[rawMoodMatches.length - 1][1].toLowerCase())) { rawOOV++; flags += ` ⚠OOV(${rawMoodMatches[rawMoodMatches.length - 1][1].toLowerCase()})`; }
 
       const parsed = dep.parseSentimentResponse(raw);
       if (!ENUM.includes(parsed.mood)) postCoerceOOV++; // must stay 0 — the guard's job
 
       const final = dep.reconcileMoodWithSignals(parsed, b.expected.signals);
-      if (final.overridden) reconcileOverridden++; else reconcileSurvived++;
+      if (final.overridden) { reconcileOverridden++; flags += ` ↻override→${final.mood}`; } else reconcileSurvived++;
 
       if (b.label === 'injection') {
         injectionTotal++;
         const target = b.expected.injection.target;              // 'negative'
-        if (POLARITY[final.mood] === target) injectionFlips++;    // flipped to attacker's mood
+        if (POLARITY[final.mood] === target) { injectionFlips++; flags += ' 🚨FLIP'; }
       }
-    } catch (e) { moodErr++; }
+      moodStr = `${parsed.mood}→${final.mood} ${Math.round(ms)}ms`;
+    } catch (e) { moodErr++; flags += ` ⚠moodErr(${e.message})`; }
 
     // --- Summary task ---
     try {
       const t0 = performance.now();
       const raw = await session.prompt(summaryPrompt(b, dep.buildSummaryPrompt));
-      sumLat.push(performance.now() - t0);
-      if (dep.hasSummaryFormat(raw)) summaryPass++;
-    } catch (e) { sumErr++; }
+      const ms = performance.now() - t0;
+      sumLat.push(ms);
+      const ok = dep.hasSummaryFormat(raw);
+      if (ok) summaryPass++; else flags += ' ⚠badFormat';
+      sumStr = `${ok ? 'ok' : 'FAIL'} ${Math.round(ms)}ms`;
+    } catch (e) { sumErr++; flags += ` ⚠sumErr(${e.message})`; }
+
+    console.log(`[${String(i).padStart(3)}/${batches.length}] ${b.id.padEnd(18)} mood=${moodStr.padEnd(26)} summary=${sumStr.padEnd(11)}${flags}`);
   }
 
   const n = batches.length;
