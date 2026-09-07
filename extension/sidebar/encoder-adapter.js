@@ -32,8 +32,16 @@ async function initTransformersRuntime() {
   // Configure ONNX WASM paths BEFORE any pipeline() call (Pitfall 2 in research)
   // Must point to vendored files via extension URL to satisfy MV3 CSP
   _env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('libs/transformers/');
-  _env.allowRemoteModels = true;
-  _env.useBrowserCache = true;
+
+  // Load MiniLM from the bundled copy — no runtime HuggingFace fetch. This
+  // eliminates the whole "HF moved a host and CSP blocks the download" failure
+  // class (Xet migration, LFS host changes, revocation). Model files live under
+  // extension/libs/models/ (vendored by scripts/vendor-minilm.sh, pinned to
+  // MODEL_REVISION). CSP connect-src is 'self' only.
+  _env.allowRemoteModels = false;
+  _env.allowLocalModels = true;
+  _env.localModelPath = chrome.runtime.getURL('libs/models/');
+  _env.useBrowserCache = false; // bundled files are already local; no cache needed
 
   _runtimeReady = true;
 }
@@ -44,12 +52,11 @@ async function initTransformersRuntime() {
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 
-// Pin the model to a specific HuggingFace commit rather than tracking `main`.
-// Transformers.js has no built-in integrity check, so an unpinned model would
-// silently pick up whatever the repo's main branch points at (a compromised
-// repo, or a CDN/MITM swap). Pinning to a reviewed commit SHA bounds what can
-// be fetched. To rotate: verify the new commit at
-// https://huggingface.co/Xenova/all-MiniLM-L6-v2/commits/main and update here.
+// HuggingFace commit the bundled model files were vendored from. The model is
+// shipped locally (extension/libs/models/), so this is not fetched at runtime;
+// it is the provenance/pin used by scripts/vendor-minilm.sh. To rotate: verify a
+// new commit at https://huggingface.co/Xenova/all-MiniLM-L6-v2/commits/main,
+// update here, and re-run the vendor script.
 const MODEL_REVISION = '751bff37182d3f1213fa05d7196b954e230abad9';
 
 let encoderPipeline = null;
@@ -191,7 +198,6 @@ async function initEncoder(onProgress) {
       encoderPipeline = await _pipeline('feature-extraction', MODEL_ID, {
         device,
         dtype: 'q8',
-        revision: MODEL_REVISION,
         progress_callback: progressCallback,
       });
 
@@ -205,7 +211,6 @@ async function initEncoder(onProgress) {
         encoderPipeline = await _pipeline('feature-extraction', MODEL_ID, {
           device: 'wasm',
           dtype: 'q8',
-          revision: MODEL_REVISION,
           progress_callback: progressCallback,
         });
       } else {

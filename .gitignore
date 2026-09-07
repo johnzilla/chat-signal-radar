@@ -9,6 +9,9 @@
 # Vendored Transformers.js + ONNX WASM files (generated from node_modules via scripts/vendor-transformers.sh)
 /extension/libs/transformers/
 
+# Bundled MiniLM model files (~23MB, downloaded from HF via scripts/vendor-minilm.sh)
+/extension/libs/models/
+
 # Node (if added later)
 node_modules/
 

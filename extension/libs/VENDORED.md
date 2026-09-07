@@ -14,6 +14,7 @@ sha256sum extension/libs/dompurify/purify.min.js
 |------|---------|---------|--------|------------------|
 | `dompurify/purify.min.js` | 3.3.1 | Apache-2.0 / MPL-2.0 | [cure53/DOMPurify](https://github.com/cure53/DOMPurify) (npm `dompurify@3.3.1`) | `scripts/vendor-dompurify.sh` |
 | `transformers/` (git-ignored, generated) | `@huggingface/transformers` ^3.8.1 | Apache-2.0 | [huggingface/transformers.js](https://github.com/huggingface/transformers.js) | `scripts/vendor-transformers.sh` |
+| `models/Xenova/all-MiniLM-L6-v2/` (git-ignored, generated) | commit `751bff37` | Apache-2.0 | [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2) | `scripts/vendor-minilm.sh` |
 
 ## SHA-256
 
@@ -25,12 +26,19 @@ sha256sum extension/libs/dompurify/purify.min.js
 shipped in npm `dompurify@3.3.1` (verified), so it is fully pinned via
 `package.json` + `package-lock.json`.
 
-## Runtime model download
+## Models — no runtime downloads
 
-The MiniLM encoder (`Xenova/all-MiniLM-L6-v2`) is fetched at runtime by
-Transformers.js from HuggingFace, pinned to a fixed commit revision in
-`extension/sidebar/encoder-adapter.js` (`MODEL_REVISION`). See that file for the
-pinned SHA and rotation instructions. This is the only remaining runtime model
-download; the WebLLM/Qwen summarizer was removed in the Gemini Nano migration
-(summarization now runs on Chrome's built-in on-device model, no download or
-fetch surface of its own).
+Both models the extension uses ship without any runtime network fetch:
+
+- **MiniLM encoder** (`Xenova/all-MiniLM-L6-v2`, embeddings) is **bundled** under
+  `extension/libs/models/`, vendored by `scripts/vendor-minilm.sh` at the commit
+  pinned in `encoder-adapter.js` (`MODEL_REVISION`). Transformers.js loads it
+  locally (`allowRemoteModels=false`, `localModelPath=libs/models/`), so the CSP
+  `connect-src` is `'self'` only — HuggingFace host changes (e.g. the Xet/AWS-CDN
+  migration) can no longer break the encoder. To rotate: bump `MODEL_REVISION`
+  and re-run the vendor script.
+- **Summarization/mood** runs on Chrome's built-in **Gemini Nano** (on-device,
+  managed by the browser) — no bundled weights, no fetch surface of its own.
+
+The model files are git-ignored (like the vendored Transformers.js runtime) and
+re-created by the vendor scripts, which `scripts/package.sh` runs before zipping.

@@ -36,7 +36,7 @@ Content Script → Background Worker → Sidebar UI → WASM Engine
   - `llm-adapter.js`: Gemini Nano (Chrome built-in AI) with rule-based fallback
   - `settings-defaults.js`: Shared DEFAULT_SETTINGS (single source of truth)
   - `sidebar/`: UI components (HTML, JS, CSS with system theme support)
-    - `encoder-adapter.js`: MiniLM encoder via Transformers.js (lazy-init, WebGPU with WASM fallback)
+    - `encoder-adapter.js`: MiniLM encoder via Transformers.js (lazy-init, WebGPU with WASM fallback; model bundled locally — no runtime HF fetch)
     - `cosine-router.js`: Cosine similarity classification into 4 buckets
     - `routing-config.js`: Seed phrases, per-category thresholds, tuning config
     - `modules/`: Modular components (gpu-scheduler.js)
@@ -102,7 +102,7 @@ There are 42 JS tests across 10 suites covering:
 - `extension/llm-adapter.js`: Gemini Nano (Prompt API) engine for AI-powered summaries + sentiment, with rule-based fallback
 - `extension/sidebar/sidebar.js`: Main entry point, WASM loading, UI event handling
 - `extension/settings-defaults.js`: Shared DEFAULT_SETTINGS (imported by sidebar.js, options.js, StateManager.js)
-- `extension/sidebar/encoder-adapter.js`: MiniLM encoder pipeline (lazy-init, WebGPU/WASM backends, batched queue)
+- `extension/sidebar/encoder-adapter.js`: MiniLM encoder pipeline (lazy-init, WebGPU/WASM backends, batched queue; loads the bundled model from `libs/models/`, no runtime download)
 - `extension/sidebar/cosine-router.js`: Prototype vector computation, per-message cosine classification, mode state
 - `extension/sidebar/routing-config.js`: Seed phrases per category, per-category thresholds, tuning constants
 - `extension/sidebar/modules/`: Modular components

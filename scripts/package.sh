@@ -7,22 +7,26 @@ echo "🏗️  Building Chat Signal for CWS submission..."
 echo ""
 
 # 1. Install locked dev deps (reproducible: uses package-lock.json exactly)
-echo "Step 1/4: Installing locked dependencies (npm ci)..."
+echo "Step 1/5: Installing locked dependencies (npm ci)..."
 npm ci --ignore-scripts
 
 # 2. Build WASM
 echo ""
-echo "Step 2/4: Building WASM engine..."
+echo "Step 2/5: Building WASM engine..."
 ./scripts/build.sh
 
-# 3. Vendor Transformers.js
+# 3. Vendor Transformers.js + the bundled MiniLM model
 echo ""
-echo "Step 3/4: Vendoring Transformers.js..."
+echo "Step 3/5: Vendoring Transformers.js..."
 ./scripts/vendor-transformers.sh
 
-# 4. Create ZIP
 echo ""
-echo "Step 4/4: Packaging extension..."
+echo "Step 4/5: Vendoring MiniLM model..."
+./scripts/vendor-minilm.sh
+
+# 5. Create ZIP
+echo ""
+echo "Step 5/5: Packaging extension..."
 
 # Remove old ZIP if it exists
 rm -f "$ZIP_NAME"
