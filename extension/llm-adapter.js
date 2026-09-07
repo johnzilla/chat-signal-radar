@@ -5,6 +5,7 @@ const DEBUG = false;
 let engine = null;
 let isInitializing = false;
 let isInitialized = false;
+let _engineKind = 'none'; // 'none' | 'nano' | 'webllm' | 'fallback'
 
 let _inFallback = false;
 let _fallbackReason = 'none'; // 'none' | 'no-gpu' | 'garbage' | 'error'
@@ -34,9 +35,22 @@ async function initializeLLM(progressCallback = null) {
   try {
     isInitializing = true;
 
-    // Check if WebLLM bundle exists
+    // Prefer Chrome's built-in AI (Gemini Nano) when the device supports it.
+    const nano = await tryCreateNanoEngine(progressCallback);
+    if (nano) {
+      engine = nano;
+      _engineKind = 'nano';
+      _inFallback = false;
+      _fallbackReason = 'none';
+      isInitialized = true;
+      if (DEBUG) console.log('[LLM] Gemini Nano engine initialized');
+      if (progressCallback) progressCallback({ progress: 1, text: 'AI ready' });
+      return;
+    }
+
+    // Legacy path: bundled WebLLM (Qwen), else rule-based fallback.
     const webllmPath = chrome.runtime.getURL('libs/web-llm/index.js');
-    
+
     try {
       // Try to load bundled WebLLM
       const { CreateMLCEngine } = await import(webllmPath);
@@ -53,6 +67,7 @@ async function initializeLLM(progressCallback = null) {
         }
       });
 
+      _engineKind = 'webllm';
       isInitialized = true;
       if (DEBUG) console.log('[LLM] WebLLM engine initialized successfully');
 
@@ -60,6 +75,7 @@ async function initializeLLM(progressCallback = null) {
       // If bundle doesn't exist or GPU unavailable, use fallback
       console.warn('[LLM] WebLLM bundle not found, using fallback summarizer:', bundleError);
       engine = createFallbackEngine();
+      _engineKind = 'fallback';
       _inFallback = true;
       const msg = bundleError.message || '';
       const isGpuError = /gpu|adapter|webgpu/i.test(msg);
@@ -101,6 +117,69 @@ function createFallbackEngine() {
       }
     }
   };
+}
+
+/**
+ * Create an engine backed by Chrome's built-in Gemini Nano (Prompt API).
+ * Implements the same { chat.completions.create } interface as the WebLLM and
+ * fallback engines, so nothing downstream (sanitize → prompt → parse →
+ * reconcile → validate) changes.
+ *
+ * Hard rule from the feasibility spike: use a PRISTINE session per call.
+ * The Prompt API session is stateful; sharing one across calls bloated latency
+ * ~7x. The base session is never prompted directly — each call clones it and
+ * destroys the clone.
+ */
+async function createNanoEngine(progressCallback = null) {
+  const base = await LanguageModel.create({
+    expectedInputs: [{ type: 'text', languages: ['en'] }],
+    expectedOutputs: [{ type: 'text', languages: ['en'] }],
+    monitor(m) {
+      m.addEventListener('downloadprogress', (e) => {
+        if (progressCallback) progressCallback({ progress: e.loaded || 0, text: 'Downloading on-device AI…' });
+      });
+    }
+  });
+  const supportsClone = typeof base.clone === 'function';
+  return {
+    _isNano: true,
+    _base: base,
+    chat: {
+      completions: {
+        create: async ({ messages }) => {
+          // Fold the system + user turns into one prompt. The prompts already
+          // carry the untrusted-data fence and anti-instruction wording verbatim.
+          const text = (messages || []).map(m => m.content).filter(Boolean).join('\n\n');
+          const s = supportsClone ? await base.clone() : base;
+          try {
+            const content = await s.prompt(text);
+            return { choices: [{ message: { content } }] };
+          } finally {
+            if (supportsClone) { try { s.destroy(); } catch (_) {} }
+          }
+        }
+      }
+    }
+  };
+}
+
+/**
+ * Attempt to create a Nano engine, gated on availability. Returns null when the
+ * Prompt API is unavailable (unsupported browser or hardware-gated device), so
+ * initialization degrades to WebLLM/rule-based permanently for that session.
+ */
+async function tryCreateNanoEngine(progressCallback = null) {
+  try {
+    if (typeof LanguageModel === 'undefined' || typeof LanguageModel.availability !== 'function') return null;
+    const status = await LanguageModel.availability();
+    // 'unavailable' → unsupported/hardware-gated. 'available' | 'downloadable' |
+    // 'downloading' can all be created (create() resolves after any download).
+    if (!status || status === 'unavailable') return null;
+    return await createNanoEngine(progressCallback);
+  } catch (err) {
+    console.warn('[LLM] Nano unavailable, falling back:', err);
+    return null;
+  }
 }
 
 /**
@@ -356,6 +435,7 @@ REASON: [one sentence explanation]`;
         _inFallback = true;
         _fallbackReason = 'garbage';
         engine = createFallbackEngine();
+        _engineKind = 'fallback';
         if (DEBUG) console.warn('[LLM] Too many garbage responses, switching to rule-based fallback for this session.');
 
         // Auto-retry once after cooldown if the engine was real (not missing-bundle fallback)
@@ -601,10 +681,17 @@ function isLLMReady() {
 async function resetLLM() {
   if (engine) {
     engine = null;
+    _engineKind = 'none';
     isInitialized = false;
     isInitializing = false;
   }
 }
+
+/**
+ * Which backend is currently active.
+ * @returns {'none'|'nano'|'webllm'|'fallback'}
+ */
+function getActiveBackend() { return _engineKind; }
 
 /**
  * Check if the session has switched to rule-based fallback mode due to
@@ -644,6 +731,7 @@ export {
   resetLLM,
   isInFallback,
   getFallbackReason,
+  getActiveBackend,
   retryLLM,
   // Exported for unit testing of prompt-injection hardening
   sanitizeChatSample,
