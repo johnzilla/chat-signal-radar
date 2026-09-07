@@ -1,11 +1,11 @@
-// LLM Adapter for WebLLM integration (MV3-safe, bundled version)
+// LLM Adapter — Chrome built-in AI (Gemini Nano) with a rule-based fallback floor
 
 const DEBUG = false;
 
 let engine = null;
 let isInitializing = false;
 let isInitialized = false;
-let _engineKind = 'none'; // 'none' | 'nano' | 'webllm' | 'fallback'
+let _engineKind = 'none'; // 'none' | 'nano' | 'fallback'
 
 let _inFallback = false;
 let _fallbackReason = 'none'; // 'none' | 'no-gpu' | 'garbage' | 'error'
@@ -16,7 +16,8 @@ let _autoRetryScheduled = false;
 const GARBAGE_RETRY_COOLDOWN_MS = 60_000;
 
 /**
- * Initialize WebLLM engine with bundled library
+ * Initialize the summarization/sentiment engine: Gemini Nano when available,
+ * else the rule-based fallback.
  * @param {Function} progressCallback - Optional callback for initialization progress
  * @returns {Promise<void>}
  */
@@ -35,57 +36,26 @@ async function initializeLLM(progressCallback = null) {
   try {
     isInitializing = true;
 
-    // Prefer Chrome's built-in AI (Gemini Nano) when the device supports it.
+    // Prefer Chrome's built-in AI (Gemini Nano) when the device supports it;
+    // otherwise degrade permanently to the rule-based floor for this session.
     const nano = await tryCreateNanoEngine(progressCallback);
     if (nano) {
       engine = nano;
       _engineKind = 'nano';
       _inFallback = false;
       _fallbackReason = 'none';
-      isInitialized = true;
       if (DEBUG) console.log('[LLM] Gemini Nano engine initialized');
       if (progressCallback) progressCallback({ progress: 1, text: 'AI ready' });
-      return;
-    }
-
-    // Legacy path: bundled WebLLM (Qwen), else rule-based fallback.
-    const webllmPath = chrome.runtime.getURL('libs/web-llm/index.js');
-
-    try {
-      // Try to load bundled WebLLM
-      const { CreateMLCEngine } = await import(webllmPath);
-
-      // Initialize with small model (Qwen2.5-0.5B-Instruct)
-      engine = await CreateMLCEngine('Qwen2.5-0.5B-Instruct-q4f16_1-MLC', {
-        initProgressCallback: (report) => {
-          if (progressCallback) {
-            progressCallback({
-              progress: report.progress || 0,
-              text: report.text || 'Loading...'
-            });
-          }
-        }
-      });
-
-      _engineKind = 'webllm';
-      isInitialized = true;
-      if (DEBUG) console.log('[LLM] WebLLM engine initialized successfully');
-
-    } catch (bundleError) {
-      // If bundle doesn't exist or GPU unavailable, use fallback
-      console.warn('[LLM] WebLLM bundle not found, using fallback summarizer:', bundleError);
+    } else {
+      // Nano unavailable (unsupported browser or hardware-gated device).
       engine = createFallbackEngine();
       _engineKind = 'fallback';
       _inFallback = true;
-      const msg = bundleError.message || '';
-      const isGpuError = /gpu|adapter|webgpu/i.test(msg);
-      _fallbackReason = isGpuError ? 'no-gpu' : 'error';
-      isInitialized = true;
-
-      if (progressCallback) {
-        progressCallback({ progress: 1, text: 'Using fallback mode' });
-      }
+      _fallbackReason = 'no-gpu';
+      if (DEBUG) console.log('[LLM] Nano unavailable, using rule-based analysis');
+      if (progressCallback) progressCallback({ progress: 1, text: 'Using rule-based mode' });
     }
+    isInitialized = true;
 
   } catch (error) {
     console.error('[LLM] Initialization failed:', error);
@@ -97,7 +67,7 @@ async function initializeLLM(progressCallback = null) {
 }
 
 /**
- * Create fallback engine for when WebLLM is not available
+ * Create fallback engine for when no LLM backend is available (rule-based floor)
  */
 function createFallbackEngine() {
   return {
@@ -121,8 +91,8 @@ function createFallbackEngine() {
 
 /**
  * Create an engine backed by Chrome's built-in Gemini Nano (Prompt API).
- * Implements the same { chat.completions.create } interface as the WebLLM and
- * fallback engines, so nothing downstream (sanitize → prompt → parse →
+ * Implements the same { chat.completions.create } interface as the rule-based
+ * fallback engine, so nothing downstream (sanitize → prompt → parse →
  * reconcile → validate) changes.
  *
  * Hard rule from the feasibility spike: use a PRISTINE session per call.
@@ -166,7 +136,7 @@ async function createNanoEngine(progressCallback = null) {
 /**
  * Attempt to create a Nano engine, gated on availability. Returns null when the
  * Prompt API is unavailable (unsupported browser or hardware-gated device), so
- * initialization degrades to WebLLM/rule-based permanently for that session.
+ * initialization degrades to the rule-based floor permanently for that session.
  */
 async function tryCreateNanoEngine(progressCallback = null) {
   try {
@@ -429,8 +399,8 @@ REASON: [one sentence explanation]`;
     if (isGarbage) {
       _garbageCount++;
       if (_garbageCount >= MAX_GARBAGE_BEFORE_FALLBACK) {
-        // Capture whether this was a real Qwen engine before switching to fallback.
-        // Only schedule auto-retry if the bundle was present (not already a missing-bundle fallback).
+        // Capture whether this was a real model engine (Nano) before switching to
+        // fallback. Only schedule auto-retry if it was (not already rule-based).
         const wasRealEngine = engine && !engine._isFallback;
         _inFallback = true;
         _fallbackReason = 'garbage';
@@ -550,7 +520,7 @@ function buildSignalSummary(signals) {
 
 /**
  * Parse structured sentiment response from LLM using keyword-scan regex.
- * Handles Qwen2.5's conversational preamble by searching for keywords anywhere
+ * Handles the model's conversational preamble by searching for keywords anywhere
  * in the response, not just at line start.
  */
 function parseSentimentResponse(response) {
@@ -689,7 +659,7 @@ async function resetLLM() {
 
 /**
  * Which backend is currently active.
- * @returns {'none'|'nano'|'webllm'|'fallback'}
+ * @returns {'none'|'nano'|'fallback'}
  */
 function getActiveBackend() { return _engineKind; }
 

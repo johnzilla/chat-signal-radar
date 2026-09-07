@@ -1,13 +1,13 @@
-// GPU Scheduler — serializes all WebGPU access between encoder (MiniLM) and SLM (Qwen)
-// Prevents concurrent WebGPU device access via a promise-chain mutex with priority ordering,
-// starvation prevention, timeout enforcement, and device-loss detection.
+// GPU Scheduler — serializes WebGPU access for the MiniLM encoder
+// Prevents overlapping WebGPU pipeline calls via a promise-chain mutex with
+// priority ordering, starvation prevention, and timeout enforcement.
 //
 // Usage:
-//   import { scheduleGpuTask, getStatus, registerDevice } from './modules/gpu-scheduler.js';
+//   import { scheduleGpuTask, getStatus } from './modules/gpu-scheduler.js';
 //
-// Consumers:
-//   encoder-adapter.js  — type='encoder', priority=1
-//   llm-adapter.js      — type='slm',     priority=2  (Phase 11)
+// Consumer:
+//   encoder-adapter.js — type='encoder', priority=1
+//   (The SLM path was removed with the Nano migration; Nano runs off-GPU-queue.)
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -69,29 +69,7 @@ function getStatus() {
   };
 }
 
-/**
- * Register a WebGPU device for loss detection.
- * Attaches a .then() handler to device.lost — do NOT await this.
- * When device is permanently lost, sets _gpuAvailable=false and dispatches 'gpu-unavailable'.
- *
- * @param {GPUDevice} device — The WebGPU device to watch
- */
-function registerDevice(device) {
-  // Do NOT await — device.lost never resolves during normal operation (Pitfall 2 from research)
-  device.lost.then((info) => {
-    console.error(`[GPUScheduler] WebGPU device lost: ${info.message}`);
-
-    // 'destroyed' = intentional cleanup (our own device.destroy() call), not a fault
-    if (info.reason !== 'destroyed') {
-      _gpuAvailable = false;
-      window.dispatchEvent(new CustomEvent('gpu-unavailable', {
-        detail: { reason: info.reason, message: info.message },
-      }));
-    }
-  });
-}
-
-export { scheduleGpuTask, getStatus, registerDevice };
+export { scheduleGpuTask, getStatus };
 
 // ---------------------------------------------------------------------------
 // Internal functions
