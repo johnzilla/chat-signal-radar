@@ -95,7 +95,8 @@ Full-repo security review conducted 2026-04-02. Re-verification 2026-09-06: comm
   - Unify AI consent: options-page AI toggle still bypasses disclosure + disk-space check
 - [ ] Phase 16: Architecture Decisions
   - GPU scheduler never serializes SLM access; `registerDevice` has zero callers — wire WebLLM through it or delete (revisit if WebLLM replaced)
-  - Evaluate Chrome Built-in AI (Prompt API / Gemini Nano) as WebLLM replacement
+  - **Gemini Nano feasibility spike (Prompt API) — PASSED (2026-09-07).** Gate-2 replay of 72-batch fixture through live Nano, scored with the extension's own machinery (tests/fixtures/nano-batches.json + scripts/nano-spike-oneshot.js). Results: mood garbage/OOV 0%, summary hasFormat 100%, injection flips 0/8, mood p95 4.8s (<10s), summary p95 5.6s (<30s), reconcile agreement ~96% (caught 2-3 injection baits/run). Design rules learned: (1) clone a pristine session per call — sharing one stateful session across calls bloated latency 7x (30-57s); (2) keep the signal-authoritative fenced prompt (kept Nano on-enum + injection-resistant); (3) parseSentimentResponse + reconcileMoodWithSignals are load-bearing — Nano's own injection resistance is only ~60-75%.
+  - **Decision pending:** adopt Nano as primary mood/summary backend with WebLLM→rule-based fallback (Nano is Chrome-only + hardware-gated, so it cannot be the only path). Adopting removes the 400MB Qwen download, the web-llm/index.js provenance gap, and the Qwen weight-pinning task from HIGH-2.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
