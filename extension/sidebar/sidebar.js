@@ -69,8 +69,8 @@ const exportJsonBtn = document.getElementById('export-json-btn');
 const exportMdBtn = document.getElementById('export-md-btn');
 const copyToast = document.getElementById('copy-toast');
 
-// LLM consent modal elements
-const llmConsentModal = document.getElementById('llm-consent-modal');
+// First-run AI note elements
+const llmAiNote = document.getElementById('llm-ai-note');
 const llmEnableBtn = document.getElementById('llm-enable-btn');
 const llmSkipBtn = document.getElementById('llm-skip-btn');
 
@@ -149,7 +149,7 @@ function updateSystemStatus() {
     setDot(ssSemantic, 'dot-loading', 'Semantic engine: loading...');
   }
 
-  // --- AI (WebLLM) ---
+  // --- AI (Nano) ---
   if (!settings.aiSummariesEnabled && !llmLoading) {
     setDot(ssAi, 'dot-off', 'AI summaries: off');
     if (ssAi) ssAi.classList.add('clickable');
@@ -250,9 +250,9 @@ if (!isTestEnv) {
     exportMenu.classList.add('hidden');
   });
 
-  // LLM consent modal handlers
+  // First-run AI note handlers
   llmEnableBtn.addEventListener('click', async () => {
-    llmConsentModal.classList.add('hidden');
+    llmAiNote.classList.add('hidden');
     // Update the unified aiSummariesEnabled setting
     const updatedSettings = { ...settings, aiSummariesEnabled: true };
     settings = updatedSettings;
@@ -261,8 +261,8 @@ if (!isTestEnv) {
   });
 
   llmSkipBtn.addEventListener('click', async () => {
-    llmConsentModal.classList.add('hidden');
-    // Mark consent as shown, keep aiSummariesEnabled as false
+    llmAiNote.classList.add('hidden');
+    // Mark the note as shown, keep aiSummariesEnabled as false
     await chrome.storage.sync.set({ aiConsentShown: true });
     llmEnabled = false;
     statusText.textContent = 'Ready! Waiting for chat messages...';
@@ -275,7 +275,7 @@ if (!isTestEnv) {
       if (fallbackNotice) fallbackNotice.classList.add('hidden');
       retryAiBtn.disabled = true;
       llmLoading = true;
-      statusText.textContent = 'Reloading AI model...';
+      statusText.textContent = 'Reloading AI…';
       updateSystemStatus();
       try {
         await retryLLM((progress) => {
@@ -341,22 +341,6 @@ if (!isTestEnv) {
   });
 }
 
-const REQUIRED_BYTES = 450 * 1024 * 1024; // 450MB
-
-async function checkStorageAvailability() {
-  if (!navigator.storage || typeof navigator.storage.estimate !== 'function') {
-    // API unavailable — allow attempt (per decision: let it fail naturally)
-    return { sufficient: true };
-  }
-  try {
-    const { quota, usage } = await navigator.storage.estimate();
-    const available = quota - usage;
-    return { sufficient: available >= REQUIRED_BYTES };
-  } catch (err) {
-    console.warn('[LLM Consent] Storage estimate failed:', err);
-    return { sufficient: true }; // On error — allow attempt
-  }
-}
 
 // Load settings from chrome.storage
 async function loadSettings() {
@@ -538,32 +522,24 @@ async function initWasm() {
   }
 }
 
-// Check AI settings and show consent modal if needed
+// Check AI settings and show the first-run note if needed
 async function checkAISettings() {
   try {
     const result = await chrome.storage.sync.get('aiConsentShown');
 
     if (settings.aiSummariesEnabled) {
-      // AI is enabled, initialize LLM
+      // AI is enabled, initialize the engine
       startLLMInitialization();
     } else if (result.aiConsentShown) {
-      // User has seen consent modal before and chose not to enable
+      // User has seen the first-run note before and chose not to enable
       llmEnabled = false;
       statusText.textContent = 'Ready! Waiting for chat messages...';
       updateSystemStatus();
     } else {
-      // First time — check storage then show consent modal
+      // First time — show the lightweight on-device-AI note (no download to
+      // disclose; Nano runs locally via Chrome's built-in model).
       statusText.textContent = 'Ready! Waiting for chat messages...';
-
-      const { sufficient } = await checkStorageAvailability();
-      if (!sufficient) {
-        llmEnableBtn.disabled = true;
-        const warningEl = document.getElementById('llm-space-warning');
-        if (warningEl) warningEl.classList.remove('hidden');
-        llmSkipBtn.textContent = 'Continue without AI';
-      }
-
-      llmConsentModal.classList.remove('hidden');
+      llmAiNote.classList.remove('hidden');
     }
   } catch (error) {
     console.warn('[Sidebar] Failed to check AI settings:', error);
@@ -574,7 +550,7 @@ async function checkAISettings() {
 // Start LLM initialization after consent
 function startLLMInitialization() {
   llmLoading = true;
-  statusText.textContent = 'Loading AI model...';
+  statusText.textContent = 'Loading on-device AI…';
   updateSystemStatus();
 
   initializeLLM((progress) => {

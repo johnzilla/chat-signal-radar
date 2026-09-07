@@ -1391,3 +1391,32 @@ h1 {
   font-size: inherit;
   color: var(--text-muted);
 }
+
+/* First-run AI note (lightweight; replaces the old consent modal) */
+.ai-note {
+  margin: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.ai-note-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.ai-note-actions {
+  display: flex;
+  gap: 8px;
+}
+.ai-note-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 12px;
+}

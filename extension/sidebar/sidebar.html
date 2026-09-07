@@ -95,26 +95,17 @@
     <div id="error" class="error hidden"></div>
 
     <!-- LLM Consent Modal -->
-    <div id="llm-consent-modal" class="modal hidden">
-      <div class="modal-backdrop"></div>
-      <div class="modal-content llm-consent-content">
-        <h3>AI Features Available</h3>
-        <p>Enable AI-powered summaries and mood analysis?</p>
-        <p class="modal-detail">
-          All processing happens locally — no chat data leaves your browser.
-          A small encoder model (~23MB) loads automatically to power clustering.
-          Enabling AI adds a language model (~400MB) downloaded from HuggingFace on first use.
-          Both models are stored locally and persist across browser sessions.
-        </p>
-        <div class="modal-actions">
-          <button id="llm-enable-btn" class="btn btn-primary">Enable AI</button>
-          <button id="llm-skip-btn" class="btn btn-secondary">Skip for now</button>
-        </div>
-        <p id="llm-space-warning" class="modal-warning hidden">
-          Not enough disk space available (~400MB needed for the AI language model)
-        </p>
-        <p class="modal-hint">You can change this later in Settings.</p>
+    <!-- First-run AI note (lightweight; replaces the old consent modal) -->
+    <div id="llm-ai-note" class="ai-note hidden">
+      <p class="ai-note-text">
+        ✨ AI summaries run <strong>on-device</strong> via Chrome's built-in AI —
+        nothing leaves your browser.
+      </p>
+      <div class="ai-note-actions">
+        <button id="llm-enable-btn" class="btn btn-primary btn-sm">Enable AI</button>
+        <button id="llm-skip-btn" class="btn btn-secondary btn-sm">Not now</button>
       </div>
+      <p class="ai-note-hint">Change this anytime in Settings.</p>
     </div>
 
     <!-- First-run guidance -->
