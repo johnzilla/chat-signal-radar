@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Real-time chat analysis must be accurate enough to be actionable — semantic clustering via MiniLM encoder vectors replaces keyword matching for dramatically better message classification.
-**Current focus:** v2.4 Security Review Hardening — Phase 13 done, Phase 14 largely done; Phase 16 Gemini Nano feasibility spike PASSED (2026-09-07), adoption decision pending
+**Current focus:** v2.4 Security Review Hardening — Phase 13 done, Phase 14 largely done; Phase 16 Gemini Nano migration SHIPPED (2026-09-07) — WebLLM/Qwen fully removed
 
 ## Current Position
 

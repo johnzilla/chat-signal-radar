@@ -12,11 +12,12 @@ Full-repo code + security review conducted 2026-04-02. Entries below supersede/e
 - **Resolution:** Layered mitigation shipped: `sanitizeChatSample()` (newline collapse, fence-marker strip, control-token neutralization, 200-char cap), `<<<CHAT>>>…<<<END>>>` data fences + anti-instruction system messages, last-match MOOD parser, `reconcileMoodWithSignals()` polarity cross-check vs WASM signals (contradiction → rule-based fallback), strict `hasSummaryFormat` (emoji/known-category prefix). +20 adversarial unit tests; 63/63 passing.
 - **Residual (accepted):** Semantic instruction-injection reduced, not eliminated; a tastefully-formatted injected line (emoji + colon) can still pass summary validation, bounded by fallback layers.
 
-### HIGH-2: Runtime Model Downloads Lack Integrity Pinning — PARTIAL (2026-09-06)
+### HIGH-2: Runtime Model Downloads Lack Integrity Pinning — RESOLVED (2026-09-07)
 - **Resolved:** MiniLM encoder pinned to HF commit `751bff37182d3f1213fa05d7196b954e230abad9` via `MODEL_REVISION` on both WebGPU/WASM pipeline calls; rotation process documented in-code (commit `49052f1`). Revision verified to resolve against the live HF endpoint.
-- **Still open:** (1) `libs/web-llm/index.js` (6.5MB shipped blob) — no recorded upstream version/URL/SHA-256; (2) WebLLM 400MB Qwen weight pinning unverified (MLC registry); (3) `package-lock.json` still git-ignored → `vendor-transformers.sh` output not reproducible; (4) vendored DOMPurify unpinned/unhashed; (5) MiniLM bundling (~23MB, eliminates always-on runtime fetch) unevaluated — scoped as follow-up by `49052f1`.
+- **Resolved via teardown:** (1) `libs/web-llm/index.js` and (2) the WebLLM 400MB Qwen weight-pinning concern are gone — WebLLM/Qwen was removed in the Nano migration (Phase 16); Nano runs on-device with no download or fetch surface. (3) `package-lock.json` committed + `npm ci` in `package.sh`. (4) DOMPurify pinned `3.3.1`, verified byte-identical to npm, SHA-256 in `VENDORED.md`.
+- **Remaining (optional):** (5) MiniLM bundling (~23MB, eliminates the one remaining always-on runtime fetch) — the encoder still downloads MiniLM from HF, pinned to a fixed revision.
 - **Files:** `extension/sidebar/encoder-adapter.js` (done), `extension/llm-adapter.js` (open), `scripts/vendor-transformers.sh`, `.gitignore`
-- **Fix approach:** `VENDORED.md` provenance + hash verification script; commit lockfile + `npm ci` in package.sh; verify WebLLM weight pinning or add hash check; decide MiniLM bundling. Remainder of Phase 14.
+- **Files:** `extension/sidebar/encoder-adapter.js`, `extension/libs/VENDORED.md`, `package-lock.json`, `scripts/package.sh`, `scripts/vendor-dompurify.sh`
 
 ### MED-1: Message Relay — No Sender Validation, Cross-Tab Session Mixing
 - **Issue:** `background.js` relays any CHAT_MESSAGES; sidebar re-broadcast reaches every extension context in every window; no `sender` checks. Two streams in two windows merge into one session.
@@ -28,10 +29,9 @@ Full-repo code + security review conducted 2026-04-02. Entries below supersede/e
 - **Files:** `extension/sidebar/sidebar.js` (onChanged ~L340, checkAISettings), `extension/options/options.js` (AI toggle handler)
 - **Fix approach:** Validate in onChanged; route options toggle through the same consent function as the modal. Planned as Phase 15.
 
-### MED-3 (upgrade of existing tech debt): GPU Scheduler Never Serializes SLM Access
-- **Issue:** Only encoder calls `scheduleGpuTask`; WebLLM manages its own WebGPU engine — 'slm' priority/burst-limit paths are dead code. `registerDevice` has zero callers, so the `gpu-unavailable` recovery listener can never fire.
-- **Files:** `extension/sidebar/modules/gpu-scheduler.js`, `extension/llm-adapter.js`
-- **Fix approach:** Wire WebLLM through the scheduler or delete the machinery; decision tied to Chrome Built-in AI (Prompt API / Gemini Nano) evaluation — could replace WebLLM entirely. Planned as Phase 16.
+### MED-3: GPU Scheduler SLM Path — RESOLVED (2026-09-07)
+- **Resolution:** WebLLM removed in the Nano migration (Phase 16), so the dead 'slm' path is gone. `gpu-scheduler.js` is KEPT — it serializes the MiniLM encoder's WebGPU access (its real, in-use consumer). Dead `registerDevice` (zero callers) removed. Nano runs off the GPU queue entirely.
+- **Files:** `extension/sidebar/modules/gpu-scheduler.js`, `extension/sidebar/encoder-adapter.js`
 
 ### New Correctness Findings (v2.3 export + content extraction)
 - Double-escaping: `safeCreateElement(tag, cls, escapeHtml(text))` renders entities literally via textContent — chat text with `&`/`<`/`>` displays wrong.
@@ -42,15 +42,8 @@ Full-repo code + security review conducted 2026-04-02. Entries below supersede/e
 
 ## Tech Debt (from 2026-02-19 analysis)
 
-### 1. Large Bundled WebLLM Library
-- **Issue:** `extension/libs/web-llm/index.js` is 5.8MB and contains 12,830 lines
-- **Files:** `extension/libs/web-llm/index.js`, `extension/manifest.json`
-- **Impact:** Significantly increases extension size, slows loading, increases memory footprint. Bundle is loaded even if user disables AI summaries. Contains numerous TODO comments (30+) indicating incomplete/workaround code from upstream WebLLM.
-- **Fix approach:**
-  - Implement lazy loading - only import WebLLM bundle when user explicitly enables AI summaries
-  - Consider using module splitting or dynamic import with error boundaries
-  - Evaluate if smaller alternative models or local fallback can satisfy requirements
-  - Remove unused bundled dependencies
+### 1. Large Bundled WebLLM Library — RESOLVED (2026-09-07)
+- **Resolution:** The 6.5MB `extension/libs/web-llm/index.js` bundle was deleted in the Nano migration (Phase 16). Summarization now uses Chrome's built-in Gemini Nano — no bundled model, no shipped LLM blob. Extension package shrinks accordingly.
 
 ### 2. Repeated Sentiment Analysis Logic
 - **Issue:** Sentiment analysis is implemented in two places: Rust WASM (`wasm-engine/src/lib.rs` lines 274-342) and JavaScript fallback (`extension/llm-adapter.js` lines 349-417)

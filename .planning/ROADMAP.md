@@ -7,7 +7,7 @@
 - ✅ **v1.2 Semantic AI Pipeline** — Phases 8-12 (shipped 2026-02-21)
 - ✅ **v2.1 CWS Launch / v2.2 Landing Page** — shipped out-of-band (git log; see CLAUDE.md)
 - ✅ **v2.3 Session Export** — shipped: nits fixed, export tests added, committed
-- 🚧 **v2.4 Security Review Hardening** — Phases 13-16 (Phase 13 complete, Phase 14 partial)
+- 🚧 **v2.4 Security Review Hardening** — Phases 13-16 (13, 14, 16 complete; 15 planned)
 
 ## Phases
 
@@ -82,25 +82,24 @@ Full-repo security review conducted 2026-04-02. Re-verification 2026-09-06: comm
   - [x] Parser prefers LAST `MOOD:` (real answer beats echoed preamble); null-guarded
   - [x] `hasSummaryFormat` requires emoji/known-category prefix — injected prose can't render
   - Residual: tastefully-formatted injected lines (emoji + colon) can still pass validation; semantic instruction-following is reduced, not eliminated — acceptable given fallback layers
-- [ ] Phase 14: Model Supply-Chain Integrity (HIGH-2) — PARTIAL (2026-09-06)
+- [x] Phase 14: Model Supply-Chain Integrity (HIGH-2) — COMPLETE (2026-09-07)
   - [x] MiniLM pinned to revision `751bff37182d3f1213fa05d7196b954e230abad9` on both pipeline calls; rotation documented in-code (commit `49052f1`) — verified SHA resolves on HF
   - [x] Dependabot group configured; `sharp` bumped (commit `6981a52`)
-  - [ ] Record provenance + SHA-256 for `libs/web-llm/index.js` (upstream version/URL still unrecorded) + vendored DOMPurify; verify in script
-  - [ ] Un-ignore `package-lock.json`, use `npm ci` in `scripts/package.sh`
-  - [ ] Verify WebLLM weight-fetch pinning for the 400MB Qwen model (MLC registry pinning status unconfirmed)
-  - [ ] Evaluate bundling MiniLM (~23MB) in the extension package (eliminates the always-on runtime fetch; commit scopes this as follow-up)
+  - [x] DOMPurify pinned 3.3.1 + provenance/SHA-256 in `VENDORED.md`; web-llm provenance moot (bundle removed in Phase 16)
+  - [x] Un-ignored `package-lock.json`; `npm ci` in `scripts/package.sh`
+  - [x] WebLLM/Qwen weight pinning — obsolete (WebLLM removed in Phase 16)
+  - [ ] (optional follow-up) Bundle MiniLM (~23MB) to eliminate the one remaining runtime fetch
 - [ ] Phase 15: Trust-Boundary Mediums
   - Sender validation + per-tab port routing (multi-window session mixing)
   - Validate settings in `chrome.storage.onChanged` listener (still bypasses `validateSettings`)
   - Unify AI consent: options-page AI toggle still bypasses disclosure + disk-space check
-- [ ] Phase 16: Architecture Decisions
-  - GPU scheduler never serializes SLM access; `registerDevice` has zero callers — wire WebLLM through it or delete (revisit if WebLLM replaced)
+- [x] Phase 16: Gemini Nano migration — SHIPPED 2026-09-07
   - **Gemini Nano feasibility spike (Prompt API) — PASSED (2026-09-07).** Gate-2 replay of 72-batch fixture through live Nano, scored with the extension's own machinery (tests/fixtures/nano-batches.json + scripts/nano-spike-oneshot.js). Results: mood garbage/OOV 0%, summary hasFormat 100%, injection flips 0/8, mood p95 4.8s (<10s), summary p95 5.6s (<30s), reconcile agreement ~96% (caught 2-3 injection baits/run). Design rules learned: (1) clone a pristine session per call — sharing one stateful session across calls bloated latency 7x (30-57s); (2) keep the signal-authoritative fenced prompt (kept Nano on-enum + injection-resistant); (3) parseSentimentResponse + reconcileMoodWithSignals are load-bearing — Nano's own injection resistance is only ~60-75%.
-  - **Decision pending:** adopt Nano as primary mood/summary backend with WebLLM→rule-based fallback (Nano is Chrome-only + hardware-gated, so it cannot be the only path). Adopting removes the 400MB Qwen download, the web-llm/index.js provenance gap, and the Qwen weight-pinning task from HIGH-2.
+  - **Migrated (16.1→16.3):** NanoEngine behind the existing interface (availability-gated, pristine-session-per-call), all hardening retained; WebLLM/Qwen fully removed (6.5MB bundle, gpu-scheduler SLM path + dead registerDevice, heavy consent modal → lightweight on-device note, unlimitedStorage, raw.githubusercontent.com CSP); docs updated. Encoder/MiniLM (and gpu-scheduler, HF CSP) deliberately kept — they belong to embeddings, not WebLLM. 79/79 tests green.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 13. LLM Prompt-Injection Hardening | v2.4 | 2/2 | **Complete** | 2026-09-06 (`bb5ea62`, +20 adversarial tests, 63/63 pass) |
-| 14. Model Supply-Chain Integrity | v2.4 | ~40% | In Progress | MiniLM pin 2026-09-06 (`49052f1`); sharp bump (`6981a52`) |
+| 14. Model Supply-Chain Integrity | v2.4 | Complete | **Complete** | 2026-09-07 (pin + provenance + lockfile; WebLLM items obsoleted) |
 | 15. Trust-Boundary Mediums | v2.4 | 0/? | Planned | - |
-| 16. Architecture Decisions | v2.4 | 0/? | Planned | - |
+| 16. Gemini Nano migration | v2.4 | Complete | **Complete** | 2026-09-07 (Nano live; WebLLM removed; 79/79) |

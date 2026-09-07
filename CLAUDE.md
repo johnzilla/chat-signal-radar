@@ -23,7 +23,7 @@ Content Script → Background Worker → Sidebar UI → WASM Engine
                                   (semantic clustering)
                                          ↓
                                     LLM Adapter
-                                  (WebLLM/fallback)
+                                  (Gemini Nano / fallback)
 ```
 
 - **wasm-engine/**: Rust WASM analysis engine
@@ -33,14 +33,13 @@ Content Script → Background Worker → Sidebar UI → WASM Engine
 - **extension/**: Chrome Extension (Manifest V3)
   - `content-script.js`: DOM observer for YouTube/Twitch chat
   - `background.js`: Service worker for message relay
-  - `llm-adapter.js`: WebLLM integration with fallback summarizer
+  - `llm-adapter.js`: Gemini Nano (Chrome built-in AI) with rule-based fallback
   - `settings-defaults.js`: Shared DEFAULT_SETTINGS (single source of truth)
   - `sidebar/`: UI components (HTML, JS, CSS with system theme support)
     - `encoder-adapter.js`: MiniLM encoder via Transformers.js (lazy-init, WebGPU with WASM fallback)
     - `cosine-router.js`: Cosine similarity classification into 4 buckets
     - `routing-config.js`: Seed phrases, per-category thresholds, tuning config
     - `modules/`: Modular components (gpu-scheduler.js)
-  - `libs/web-llm/`: Bundled WebLLM library (optional, for AI summaries)
   - `wasm/`: Generated WASM artifacts (git-ignored)
 - **docs/**: GitHub Pages site (privacy policy, CWS compliance docs, store assets)
   - Served at `chatsignal.dev` via GitHub Pages from `docs/` folder
@@ -100,7 +99,7 @@ There are 42 JS tests across 10 suites covering:
 - `wasm-engine/Cargo.toml`: Rust dependencies (wasm-bindgen, serde)
 - `extension/manifest.json`: Extension permissions and configuration
 - `extension/content-script.js`: Platform-specific chat extraction (YouTube/Twitch selectors)
-- `extension/llm-adapter.js`: WebLLM integration for AI-powered sentiment analysis
+- `extension/llm-adapter.js`: Gemini Nano (Prompt API) engine for AI-powered summaries + sentiment, with rule-based fallback
 - `extension/sidebar/sidebar.js`: Main entry point, WASM loading, UI event handling
 - `extension/settings-defaults.js`: Shared DEFAULT_SETTINGS (imported by sidebar.js, options.js, StateManager.js)
 - `extension/sidebar/encoder-adapter.js`: MiniLM encoder pipeline (lazy-init, WebGPU/WASM backends, batched queue)
@@ -113,7 +112,6 @@ There are 42 JS tests across 10 suites covering:
   - `ValidationHelpers.js`: Input validation and sanitization
   - `FormattingHelpers.js`: Text formatting and display utilities
 - `extension/storage-manager.js`: Session history persistence using chrome.storage.local
-- `extension/WEBLLM_SETUP.md`: Detailed WebLLM setup instructions
 
 ## WASM Engine Functions
 
@@ -156,7 +154,7 @@ Analyzes sentiment using lexicon-based matching.
 - **Input Validation**: Validate all WASM output and user input with `ValidationHelpers.js`
 - Structure messages with `type` field for chrome message passing
 - Use `chrome.runtime.getURL()` for extension resource paths
-- LLM calls should have fallback behavior for when WebLLM is unavailable
+- LLM calls should have fallback behavior for when Nano is unavailable
 - Follow modular architecture: separate concerns into modules/ and utils/
 - Browser-only imports (Transformers.js, chrome APIs) should be lazy-loaded via dynamic `import()` in encoder-adapter.js so the module can be imported in Node.js tests
 - Settings defaults must come from `extension/settings-defaults.js` (single source of truth)
@@ -177,13 +175,13 @@ The sentiment system uses a two-tier approach:
    - Neutral: everything else
    - Priority order means "this is awesome?" counts as positive, not confused
 
-2. **LLM Adapter** (Qwen2.5-0.5B-Instruct) determines mood from signals:
+2. **LLM Adapter** (Gemini Nano) determines mood from signals:
    - Ignores neutral messages when calculating mood
    - Requires at least 3 sentiment signals before declaring a non-neutral mood
    - Upgrades positive → excited when sentiment_score > 30
    - Upgrades negative → angry when sentiment_score < -30
    - Keyword-scan regex parser (`MOOD:`, `CONFIDENCE:`, `REASON:`) tolerates model preamble
-   - Falls back to rule-based analysis if WebLLM unavailable or after repeated garbage output
+   - Falls back to rule-based analysis if Nano unavailable or after repeated garbage output
 
 ## Data Flow
 
@@ -206,7 +204,7 @@ Cosine Router (if semantic mode active)
     ↓
 Overrides bucket assignments with cosine-classified buckets
     ↓
-LLM Adapter (Qwen2.5-0.5B-Instruct, if ready)
+LLM Adapter (Gemini Nano, if ready)
     ↓
 Receives pre-classified semantic buckets with sample messages
     ↓
@@ -236,46 +234,53 @@ Sidebar renders:
 - Optional: cargo-watch for development auto-rebuild
 - Dev dependencies (npm): Playwright (screenshots), sharp (image generation)
 
-## WebLLM Integration (Optional)
+## AI Summaries — Chrome Built-in AI (Gemini Nano)
 
-The extension supports optional AI-powered summaries using WebLLM (in-browser LLM). The feature gracefully degrades to a rule-based fallback if WebLLM is not available.
+AI-powered summaries and mood analysis run on **Chrome's built-in AI (Gemini
+Nano)** via the Prompt API (`LanguageModel`). Everything is on-device — no model
+download from the extension, no network fetch surface of its own. The feature
+degrades permanently to a rule-based fallback on browsers/devices without Nano.
 
 ### User Consent Flow
 
-On first run, users see a consent modal before any AI model download:
-- **Enable AI** - Sets `aiSummariesEnabled: true` in settings, downloads ~400MB model from HuggingFace CDN
-- **Skip** - Keeps `aiSummariesEnabled: false`, uses rule-based fallback
+On first run, users see a lightweight note: "AI summaries run on-device via
+Chrome's built-in AI" with **Enable AI** / **Not now**.
+- **Enable AI** — sets `aiSummariesEnabled: true`, initializes Nano.
+- **Not now** — keeps `aiSummariesEnabled: false`, uses the rule-based fallback.
 
-The consent modal discloses persistent disk usage (~450MB) and download source (HuggingFace CDN). If `navigator.storage.estimate()` reports insufficient space, the "Enable AI" button is disabled with a warning message.
-
-The same `aiSummariesEnabled` setting is used by both the consent modal and the Settings page toggle, providing a single source of truth. A separate `aiConsentShown` flag tracks whether the user has seen the consent modal.
+There is no download/disk disclosure (Nano is managed by Chrome, not the
+extension). `aiSummariesEnabled` is the single source of truth (shared with the
+Settings toggle); `aiConsentShown` tracks whether the note has been shown once.
 
 ### How it works
 
-1. `llm-adapter.js` attempts to load WebLLM from `libs/web-llm/index.js`
-2. If user consented and bundle found, uses Qwen2.5-0.5B-Instruct-q4f16_1-MLC model for summarization
-3. If bundle not found or user declined, falls back to rule-based summary extraction
-4. Sidebar displays AI-generated summaries alongside cluster buckets
+1. `initializeLLM()` calls `LanguageModel.availability()`; if usable it creates
+   a base Nano session, else it falls back to the rule-based floor.
+2. `NanoEngine` implements the same `{ chat.completions.create }` interface as
+   the fallback, so every hardening layer is unchanged (sanitize → fenced
+   signal-authoritative prompt → `parseSentimentResponse` w/ OOV coercion →
+   `reconcileMoodWithSignals` → `hasSummaryFormat`).
+3. **Pristine session per call** — the base session is never prompted; each call
+   clones it and destroys the clone (sharing a stateful session bloated latency
+   ~7x in the feasibility spike).
+4. Sidebar displays AI-generated summaries alongside cluster buckets.
 
-### Setup Options
-
-See `extension/WEBLLM_SETUP.md` for detailed instructions. Three options:
-- **Manual Bundle** (recommended): Download pre-built WebLLM files
-- **Build from Source**: Use npm/esbuild to bundle
-- **Fallback Only**: Works without any setup using rule-based summaries
+Feasibility spike + reusable dataset: `tests/fixtures/nano-batches.json`,
+`scripts/nano-spike-oneshot.js` (see `.planning/ROADMAP.md` Phase 16).
 
 ### LLM Adapter API
 
 ```javascript
-import { initializeLLM, summarizeBuckets, analyzeSentiment, isLLMReady, resetLLM, isInFallback, retryLLM } from './llm-adapter.js';
+import { initializeLLM, summarizeBuckets, analyzeSentiment, isLLMReady, resetLLM, isInFallback, getActiveBackend, retryLLM } from './llm-adapter.js';
 
-await initializeLLM(progressCallback);  // Initialize engine
+await initializeLLM(progressCallback);  // Initialize engine (Nano → fallback)
 const summary = await summarizeBuckets(buckets);  // Generate summary
 const sentiment = await analyzeSentiment(messages, signals);  // Analyze mood
-isLLMReady();  // Check if ready
-await resetLLM();  // Cleanup
-isInFallback();  // Check if in rule-based fallback mode
-await retryLLM();  // Re-initialize engine after fallback
+isLLMReady();          // Check if ready
+getActiveBackend();    // 'none' | 'nano' | 'fallback'
+await resetLLM();      // Cleanup
+isInFallback();        // Check if in rule-based fallback mode
+await retryLLM();      // Re-initialize engine after fallback
 ```
 
 ## Roadmap
@@ -330,9 +335,9 @@ await retryLLM();  // Re-initialize engine after fallback
 ### Next Up
 - [ ] **v2.4 — Security Review Hardening** (from 2026-04-02 full-repo security review):
   - ✅ **Phase 13 (HIGH): LLM prompt-injection hardening** — DONE 2026-09-06 (`bb5ea62`): sample sanitization, untrusted-data fences, last-match parser, mood↔signal polarity reconciliation, strict summary validation, +20 adversarial tests
-  - 🚧 **Phase 14 (HIGH): Model supply-chain integrity** — PARTIAL (`49052f1` pinned MiniLM to HF commit; `6981a52` dependabot). Remaining: web-llm + DOMPurify provenance/SHA-256, verify WebLLM 400MB weight pinning, commit package-lock.json + npm ci, evaluate bundling MiniLM (~23MB) in package
+  - ✅ **Phase 14 (HIGH): Model supply-chain integrity** — MiniLM pinned to HF commit (`49052f1`); DOMPurify pinned + provenance/SHA-256 in `VENDORED.md`; `package-lock.json` committed + `npm ci` in packaging. WebLLM/Qwen provenance + weight-pinning items obsoleted by the Nano migration (Phase 16). MiniLM bundling remains an optional follow-up.
   - **Phase 15 (MED): Trust boundaries** — sender validation + per-tab messaging, validate settings in onChanged, unify AI consent across options/sidebar
-  - **Phase 16 (ARCH): GPU scheduler wire-up-or-delete; evaluate Chrome Built-in AI (Prompt API / Gemini Nano) vs WebLLM**
+  - ✅ **Phase 16 (ARCH): Gemini Nano migration** — spike PASSED, then migrated: Nano is the primary summary/mood backend (Prompt API, pristine-session-per-call) with a rule-based fallback; WebLLM/Qwen fully removed (bundle, gpu-scheduler SLM path, consent modal, `unlimitedStorage`, HF `raw.githubusercontent.com` CSP entry). All hardening layers retained.
 - [ ] **v2.5 — Analytics/Telemetry**: Opt-in anonymous usage stats to inform roadmap priorities
 - [ ] **v2.6 — Onboarding Improvements**: Guided first-run experience to reduce churn
 - [ ] **v2.7 — Streamer/Viewer Mode Toggle**: Different default views and priorities per user role
