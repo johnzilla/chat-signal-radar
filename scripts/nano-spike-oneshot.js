@@ -18,6 +18,17 @@
   });
   console.log('✅ session ready');
 
+  // The Prompt API session is STATEFUL — every prompt appends to its history.
+  // Reusing one session for many independent classifications bloats context and
+  // tanks latency. Clone a pristine session per call (the base is never prompted).
+  const supportsClone = typeof session.clone === 'function';
+  const ask = async (prompt) => {
+    if (!supportsClone) return session.prompt(prompt);
+    const s = await session.clone();
+    try { return await s.prompt(prompt); } finally { try { s.destroy(); } catch (_) {} }
+  };
+  console.log(supportsClone ? '✅ per-call session isolation (clone)' : '⚠️ clone() unavailable — latency will be inflated by context growth');
+
   const dep = await import(chrome.runtime.getURL('llm-adapter.js'));
   for (const fn of ['parseSentimentResponse', 'reconcileMoodWithSignals', 'hasSummaryFormat', 'sanitizeChatSample', 'buildSummaryPrompt']) {
     if (typeof dep[fn] !== 'function') { console.error('❌ llm-adapter.js missing export:', fn, '— is main up to date?'); return; }
@@ -42,7 +53,7 @@
   for (const b of batches) {
     i++; let moodStr = 'err', sumStr = 'err', flags = '';
     try {
-      const t = performance.now(); const raw = await session.prompt(moodPrompt(b)); const ms = performance.now() - t; moodLat.push(ms);
+      const t = performance.now(); const raw = await ask(moodPrompt(b)); const ms = performance.now() - t; moodLat.push(ms);
       const mm = [...raw.matchAll(/MOOD:\s*([a-z]+)/gi)];
       if (!mm.length) { unparseable++; flags += ' ⚠unparseable'; } else if (!ENUM.includes(mm[mm.length - 1][1].toLowerCase())) { rawOOV++; flags += ` ⚠OOV(${mm[mm.length - 1][1].toLowerCase()})`; }
       const parsed = dep.parseSentimentResponse(raw); if (!ENUM.includes(parsed.mood)) postOOV++;
@@ -51,7 +62,7 @@
       moodStr = `${parsed.mood}→${fin.mood} ${Math.round(ms)}ms`;
     } catch (e) { moodErr++; flags += ` ⚠moodErr(${e.message})`; }
     try {
-      const t = performance.now(); const raw = await session.prompt(summaryPrompt(b)); const ms = performance.now() - t; sumLat.push(ms);
+      const t = performance.now(); const raw = await ask(summaryPrompt(b)); const ms = performance.now() - t; sumLat.push(ms);
       const ok = dep.hasSummaryFormat(raw); if (ok) sumPass++; else flags += ' ⚠badFormat'; sumStr = `${ok ? 'ok' : 'FAIL'} ${Math.round(ms)}ms`;
     } catch (e) { sumErr++; flags += ` ⚠sumErr(${e.message})`; }
     console.log(`[${String(i).padStart(3)}/${batches.length}] ${b.id.padEnd(18)} mood=${moodStr.padEnd(26)} summary=${sumStr.padEnd(11)}${flags}`);
